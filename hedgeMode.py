@@ -10,8 +10,14 @@ logger = logging.getLogger('trade')
 class HedgeMode():
     timeframe = '5m'
     n_fails = 0
-    def __init__(self,vars):
+    def __init__(self,dataframe,vars):
+        self.prices = dataframe
+        self.indicators = []#list(dataframe.columns)
         self.vars = vars
+        self.populate_indicators()
+
+    def populate_indicators(self):
+        pass
 
     def getNewOrders(self,pair, price,index):
         leverage = self.vars['leverage']
@@ -83,14 +89,11 @@ class HedgeMode():
             if market_type=="trend":
                 self.vars['kpos'] = tp_side
 
-    def back_test(self, dataframe: pd.DataFrame) -> pd.DataFrame:
-        self.prices = dataframe
-        self.indicators = list(dataframe.columns)
-
+    def back_test(self) -> pd.DataFrame:
         hasPositions = False
         self.positionHistory = []
         self.n_fails = 0
-        for i,r in dataframe.iterrows():
+        for i,r in self.prices.iterrows():
             if not hasPositions:
                 orders = self.getNewOrders("dummy",r['open'],i)
                 tp = orders[0]['tp']
@@ -109,12 +112,14 @@ class HedgeMode():
                     position['exit_price'] = tp
                     position['long_result'] = 'WIN'
                     position['short_result'] = 'LOSS'
-                    self.Profit(0,i+1)
+                    if i<len(self.prices)-1:
+                        self.Profit(0,i+1)
                     hasPositions = False
                 elif r['low'] < sl:
                     # if len(self.positionHistory)==1712:
                     #     print("danger")
-                    self.Profit(1,i+1)
+                    if i<len(self.prices)-1:
+                        self.Profit(1,i+1)
                     position['exit_price'] = sl
                     position['long_result'] = 'LOSS'
                     position['short_result'] = 'WIN'

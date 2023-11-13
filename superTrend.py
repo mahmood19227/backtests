@@ -4,14 +4,15 @@ import argparse
 import numpy as np
 import pandas as pd
 import talib.abstract as ta
+import pandas_ta as pta
 from hedgeMode import HedgeMode
 logger = logging.getLogger('trade')
 
 
 class SuperTrend(HedgeMode):
-    def __init__(self,vars):
-        self.vars = vars
-        self.indicators = []#'rsi336','rsi672','rsi168','rsi84','rsi42','ma50','ma100','ma200','ma500','ma1000','ma1500','ma2000','ma2500','ma10000','ma20000']
+    def __init__(self,dataframe,vars):
+        super(SuperTrend, self).__init__(dataframe,vars)
+        self.indicators += ['sti_direction_30min','sti_direction_1h','sti_direction_2h','is_trend']#'rsi336','rsi672','rsi168','rsi84','rsi42','ma50','ma100','ma200','ma500','ma1000','ma1500','ma2000','ma2500','ma10000','ma20000']
 
     n_fails = 0
     def getNewOrders(self,pair, price, index):
@@ -43,34 +44,6 @@ class SuperTrend(HedgeMode):
         else:
             for i in range(1, max_fail + 1):
                 quantities[i] = ((sum(quantities[0 : i]) / ( reward_risk )) + modified_start_trade_money)*safety_factor[i-1]
-
-
-        # if k>self.vars['activation_k'] and price < self.prices.at[index,'ma50'] <  self.prices.at[index,'ma200'] and self.prices.at[index,'rsi84']<43:
-        #     self.vars['kpos'] = kpos = 1
-        # elif k>self.vars['activation_k'] and price > self.prices.at[index,'ma50'] >  self.prices.at[index,'ma200'] and self.prices.at[index,'rsi84']>57:
-        #     self.vars['kpos'] = kpos = 0
-        # else:
-        #     self.vars['temp_kpos'] = -1
-
-        # if k>self.vars['activation_k'] and price < self.prices.at[index,'ma50'] <  self.prices.at[index,'ma200'] and self.prices.at[index,'rsi84']<43 and self.prices.at[index,'rsi168']<45:
-        #     self.vars['temp_kpos'] = kpos = 1
-        #     # print(f"temp kpos[{self.prices.at[index,'date']}] = {kpos}")
-        # elif k>self.vars['activation_k'] and price > self.prices.at[index,'ma50'] >  self.prices.at[index,'ma200'] and self.prices.at[index,'rsi84']>57 and self.prices.at[index,'rsi168']>55:
-        #     self.vars['temp_kpos'] = kpos = 0
-        #     # print(f"temp kpos[{self.prices.at[index,'date']}] = {kpos}")
-        # else:
-        #     self.vars['temp_kpos'] = -1
-
-        # if k>self.vars['activation_k'] and self.vars['temp_kpos']==-1 and price < self.prices.at[index,'ma50'] <  self.prices.at[index,'ma200'] and self.prices.at[index,'rsi84']<43 and self.prices.at[index,'rsi168']<45:
-        #     self.vars['temp_kpos'] = kpos = 1
-        #     # print(f"temp kpos[{self.prices.at[index,'date']}] = {kpos}")
-        # elif k>self.vars['activation_k'] and self.vars['temp_kpos']==-1 and price > self.prices.at[index,'ma50'] >  self.prices.at[index,'ma200'] and self.prices.at[index,'rsi84']>57 and self.prices.at[index,'rsi168']>55:
-        #     self.vars['temp_kpos'] = kpos = 0
-        #     # print(f"temp kpos[{self.prices.at[index,'date']}] = {kpos}")
-        # else:
-        #     self.vars['temp_kpos'] = -1
-
-
         qs = [0,0]
         if kpos ==-1:
             qs[0] = quantities[k] / price * self.vars['leverage']
@@ -91,12 +64,12 @@ class SuperTrend(HedgeMode):
         order2 = {'pair' : pair, 'entry_price' : price, 'side' : 'SELL', 'quantity' : qs[1], 'sl' : tp, 'tp' : sl, 'positionSide':'SHORT', 'k':k}
         return [order1,order2]
 
-    def Profit(self,tp_side):
+    def Profit(self,tp_side,index):
         if self.vars.get('temp_kpos',-1)!=-1:
             kpos = self.vars['temp_kpos']
         else:
             kpos = self.vars.get('kpos',-1)
-        market_type = self.vars.get("market_type","range")
+        market_type = 'trend' if self.prices.at[index,'is_trend'] else 'range'
         if kpos==-1:
             kpos=tp_side
             self.vars['kpos']==kpos
@@ -111,92 +84,42 @@ class SuperTrend(HedgeMode):
             if market_type=="trend":
                 self.vars['kpos'] = tp_side
 
-    buy_m1_range = range(1, 7,2)
-    buy_m2_range = range(1, 7,2)
-    buy_m3_range = range(1, 7,2)
-    buy_p1_range = range(7, 21,4)
-    buy_p2_range = range(7, 21,4)
-    buy_p3_range = range(7, 21,4)
 
-    sell_m1_range = range(1, 7,2)
-    sell_m2_range = range(1, 7,2)
-    sell_m3_range = range(1, 7,2)
-    sell_p1_range = range(7, 21,4)
-    sell_p2_range = range(7, 21,4)
-    sell_p3_range = range(7, 21,4)
-
-    def populate_indicators(self, dataframe: pd.DataFrame) -> pd.DataFrame:
-        for multiplier in self.buy_m1_range:
-            for period in self.buy_p1_range:
-                dataframe[f'supertrend_1_buy_{multiplier}_{period}'] = self.supertrend(dataframe, multiplier, period)['STX']
-                self.indicators.append(f'supertrend_1_buy_{multiplier}_{period}')
-
-        for multiplier in self.buy_m2_range:
-            for period in self.buy_p2_range:
-                dataframe[f'supertrend_2_buy_{multiplier}_{period}'] = self.supertrend(dataframe, multiplier, period)['STX']
-                self.indicators.append(f'supertrend_2_buy_{multiplier}_{period}')
-
-        for multiplier in self.buy_m3_range:
-            for period in self.buy_p3_range:
-                dataframe[f'supertrend_3_buy_{multiplier}_{period}'] = self.supertrend(dataframe, multiplier, period)['STX']
-                self.indicators.append(f'supertrend_3_buy_{multiplier}_{period}')
-
-        for multiplier in self.sell_m1_range:
-            for period in self.sell_p1_range:
-                dataframe[f'supertrend_1_sell_{multiplier}_{period}'] = self.supertrend(dataframe, multiplier, period)['STX']
-                self.indicators.append(f'supertrend_1_sell_{multiplier}_{period}')
-
-        for multiplier in self.sell_m2_range:
-            for period in self.sell_p2_range:
-                dataframe[f'supertrend_2_sell_{multiplier}_{period}'] = self.supertrend(dataframe, multiplier, period)['STX']
-                self.indicators.append(f'supertrend_2_sell_{multiplier}_{period}')
-
-        for multiplier in self.sell_m3_range:
-            for period in self.sell_p3_range:
-                dataframe[f'supertrend_3_sell_{multiplier}_{period}'] = self.supertrend(dataframe, multiplier, period)['STX']
-                self.indicators.append(f'supertrend_3_sell_{multiplier}_{period}')
-
-        return dataframe
-
-    def supertrend(self, dataframe: pd.DataFrame, multiplier, period):
-        df = dataframe.copy()
-
-        df['TR'] = ta.TRANGE(df)
-        df['ATR'] = ta.SMA(df['TR'], period)
-
-        st = 'ST_' + str(period) + '_' + str(multiplier)
-        stx = 'STX_' + str(period) + '_' + str(multiplier)
-
-        # Compute basic upper and lower bands
-        df['basic_ub'] = (df['high'] + df['low']) / 2 + multiplier * df['ATR']
-        df['basic_lb'] = (df['high'] + df['low']) / 2 - multiplier * df['ATR']
-
-        # Compute final upper and lower bands
-        df['final_ub'] = 0.00
-        df['final_lb'] = 0.00
-        for i in range(period, len(df)):
-            df['final_ub'].iat[i] = df['basic_ub'].iat[i] if df['basic_ub'].iat[i] < df['final_ub'].iat[i - 1] or df['close'].iat[i - 1] > df['final_ub'].iat[i - 1] else df['final_ub'].iat[i - 1]
-            df['final_lb'].iat[i] = df['basic_lb'].iat[i] if df['basic_lb'].iat[i] > df['final_lb'].iat[i - 1] or df['close'].iat[i - 1] < df['final_lb'].iat[i - 1] else df['final_lb'].iat[i - 1]
-
-        # Set the Supertrend value
-        df[st] = 0.00
-        for i in range(period, len(df)):
-            df[st].iat[i] = df['final_ub'].iat[i] if df[st].iat[i - 1] == df['final_ub'].iat[i - 1] and df['close'].iat[i] <= df['final_ub'].iat[i] else \
-                            df['final_lb'].iat[i] if df[st].iat[i - 1] == df['final_ub'].iat[i - 1] and df['close'].iat[i] >  df['final_ub'].iat[i] else \
-                            df['final_lb'].iat[i] if df[st].iat[i - 1] == df['final_lb'].iat[i - 1] and df['close'].iat[i] >= df['final_lb'].iat[i] else \
-                            df['final_ub'].iat[i] if df[st].iat[i - 1] == df['final_lb'].iat[i - 1] and df['close'].iat[i] <  df['final_lb'].iat[i] else 0.00
-        # Mark the trend direction up/down
-        df[stx] = np.where((df[st] > 0.00), np.where((df['close'] < df[st]), 'down',  'up'), np.NaN)
-
-        # Remove basic and final bands from the columns
-        df.drop(['basic_ub', 'basic_lb', 'final_ub', 'final_lb'], inplace=True, axis=1)
-
-        df.fillna(0, inplace=True)
-
-        return pd.DataFrame(index=df.index, data={
-            'ST' : df[st],
-            'STX' : df[stx]
+    def populate_indicators(self):
+        self.prices['date'] = pd.to_datetime(self.prices['date'])
+        self.prices.set_index('date',inplace=True)
+        df30min = self.prices.resample('30min').agg({
+            'open':'first',
+            'high':'max',
+            'low':'min',
+            'close':'last'
         })
+        df1h = self.prices.resample('1h').agg({
+            'open':'first',
+            'high':'max',
+            'low':'min',
+            'close':'last'
+        })
+        df2h = self.prices.resample('2h').agg({
+            'open':'first',
+            'high':'max',
+            'low':'min',
+            'close':'last'
+        })
+        sti = pta.supertrend(df30min['high'], df30min['low'], df30min['close'], length=10, multiplier=3)
+        df30min['sti_direction_30min'] = sti[sti.columns[1]]
+        df30min = df30min['sti_direction_30min'].shift(periods=1)
+        sti = pta.supertrend(df1h['high'], df1h['low'], df1h['close'], length=10, multiplier=3)
+        df1h['sti_direction_1h'] = sti[sti.columns[1]]
+        df1h = df1h['sti_direction_1h'].shift(periods=1)
+        sti = pta.supertrend(df2h['high'], df2h['low'], df2h['close'], length=10, multiplier=3)
+        df2h['sti_direction_2h'] = sti[sti.columns[1]]
+        df2h = df2h['sti_direction_2h'].shift(periods=1)
+        self.prices = self.prices.merge(df30min,left_index=True,right_index=True,how='left').merge(df1h,left_index=True,right_index=True,how='left').merge(df2h,left_index=True,right_index=True,how='left').ffill()
+        self.prices['is_trend'] = (self.prices['sti_direction_30min']==self.prices['sti_direction_1h']) & (self.prices['sti_direction_30min']==self.prices['sti_direction_2h'])
+        self.prices = self.prices.reset_index()
+        # print(f"columns = {self.prices.columns}")
+
     
 if __name__=='__main__':
     logging.basicConfig(
@@ -204,22 +127,20 @@ if __name__=='__main__':
     )
     parser = argparse.ArgumentParser(description='Back Tessting of strategy.')
     parser.add_argument('-pair',type=str,required=False,help='Pair that is used for backstep.',default='BTC/USDT:USDT')
-    parser.add_argument('-timerange',type=str,required=False,help='Time range that backsteps run on it.',default='20230101-')
-    parser.add_argument('-data_path',type=str,required=False,help='Path which contains OHLCV data.',default='~/freqtrade/user_data/data/binance/futures')
-    parser.add_argument('-data_file',type=str,required=False,help='File which contains OHLCV data.',default=None)
+    parser.add_argument('-timerange',type=str,required=False,help='Time range that backsteps run on it.',default='-')
+    parser.add_argument('-data_path',type=str,required=False,help='Path which contains OHLCV data.',default='data')
+    parser.add_argument('-data_file',type=str,required=False,help='File which contains OHLCV data.',default='data/Binance_BNBUSDT_5Min.csv')
     parser.add_argument('-output',type=str,required=False,help='Output csv file which results will be saved in it.',default='supertrend.csv')
-    parser.add_argument('-timeframe',required=False,type=str,help='Time frame that is used for backtesting.',default='1h')
+    parser.add_argument('-timeframe',required=False,type=str,help='Time frame that is used for backtesting.',default='5m')
     parser.add_argument('-init_money',type=int,required=False,help='Initial Money in the wallet.',default=10000)
-    parser.add_argument('-tp',type=float,required=False,help='Initial Money in the wallet.',default=0.014)
+    parser.add_argument('-tp',type=float,required=False,help='Initial Money in the wallet.',default=0.04)
     parser.add_argument('-market_type',type=str,required=False,help='Initial Money in the wallet.',default='range')
     parser.add_argument('-activation_k',type=int,required=False,help='K value that activate technical indicators watching.',default=3)
-    parser.add_argument('-fast_ma',type=int,required=False,help='Initial Money in the wallet.',default=50)
-    parser.add_argument('-slow_ma',type=int,required=False,help='Initial Money in the wallet.',default=200)
 
     args = parser.parse_args()
 
     if args.data_file is not None:
-        df = pd.read_feather(args.data_file)
+        df = pd.read_csv(args.data_file)
     else:
         if len(args.pair) != 13 or args.pair[3]!='/' or args.pair[8]!=':':
             print("Pair name must have format of pair/base:settle.")
@@ -243,23 +164,8 @@ if __name__=='__main__':
 
 
     df = df[(df['date']>=start) & (df['date']<=end)]
-    # # df['rsi672'] = ta.RSI(df,timeperiod=672)
-    # # df['rsi336'] = ta.RSI(df,timeperiod=336)
-    # # df['rsi168'] = ta.RSI(df,timeperiod=168)
-    # # df['rsi84'] = ta.RSI(df,timeperiod=84)
-    # # df['rsi42'] = ta.RSI(df,timeperiod=42)
-    # # df['ma50'] = ta.SMA(df,timeperiod=50)
-    # # df['ma100'] = ta.SMA(df,timeperiod=100)
-    # # df['ma200'] = ta.SMA(df,timeperiod=200)
-    # # df['ma500'] = ta.SMA(df,timeperiod=500)
-    # # df['ma1000'] = ta.SMA(df,timeperiod=1000)
-    # # df['ma1500'] = ta.SMA(df,timeperiod=1500)
-    # # df['ma2000'] = ta.SMA(df,timeperiod=2000)
-    # # df['ma2500'] = ta.SMA(df,timeperiod=2500)
-    # # df['ma10000'] = ta.SMA(df,timeperiod=10000)
-    # # df['ma20000'] = ta.SMA(df,timeperiod=20000)
-    # bbands = ta.BBANDS(df, timeperiod=50, nbdevup=20.0, nbdevdn=20.0, matype=0)
-    # df['BBANDS_U'],df['BBANDS_M'],df['BBANDS_L'] = bbands['upperband'],bbands['middleband'],bbands['lowerband']    
+    # sti = pta.supertrend(df['high'], df['low'], df['close'], length=7, multiplier=3)
+    # df['sti_direction'] = sti[sti.columns[1]]
 
     vars = {
         'k':0,
@@ -275,19 +181,21 @@ if __name__=='__main__':
         'market_type':args.market_type,
     }
     print(f"vars={vars}")
-    strategy = SuperTrend(vars)
-    df = strategy.populate_indicators(df)
-    result_df = strategy.back_test(df)
+    strategy = SuperTrend(df,vars)
+    # df = strategy.populate_indicators(df)
+    result_df = strategy.back_test()
     result_df.to_csv(f'{args.output}',index=False)
     print(f"Number of trades: {len(result_df)}")
     k_dist = result_df['long_k'].value_counts()
-    k_dist.at[len(k_dist)]=0
-    k_dist = k_dist.diff(-1).dropna()[1:].astype(int)
+    # k_dist.at[len(k_dist)]=0
+    # k_dist = k_dist.diff(-1).dropna()[1:].astype(int)
     print(f"Long K distributions: {k_dist}")
-
+    max_k = max(k_dist.keys())
     k_dist = result_df['short_k'].value_counts()
-    k_dist.at[len(k_dist)]=0
-    k_dist = k_dist.diff(-1).dropna()[1:].astype(int)
+    # k_dist.at[len(k_dist)]=0
+    # k_dist = k_dist.diff(-1).dropna()[1:].astype(int)
     print(f"Short K distributions: {k_dist}")
+    max_k = max(max(k_dist.keys()),max_k)
+    print(f"Max(k) = {max_k}")
 
     
